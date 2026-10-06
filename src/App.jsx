@@ -1,410 +1,431 @@
 import { useState } from "react";
-import {
-  Stethoscope, FlaskConical, User, Plus, CheckCircle2, Circle,
-  Loader2, ArrowRight, X, Activity, FileText,
-} from "lucide-react";
+import { Stethoscope, FlaskConical, LogOut, Plus, X, CheckCircle2, Circle, Loader2, Search, ShieldCheck, Activity } from "lucide-react";
 
-const INITIAL_PATIENTS = [
-  { id: "P1001", name: "Aarav Sharma", age: 24, gender: "Male", symptoms: "Fever and fatigue", assessment: "Possible viral infection" },
-  { id: "P1002", name: "Priya Nair", age: 31, gender: "Female", symptoms: "Headache and nausea", assessment: "Likely migraine" },
-  { id: "P1003", name: "Rohan Gupta", age: 45, gender: "Male", symptoms: "Cough for 5 days", assessment: "Possible bronchitis" },
+const TODAY = "06 Oct 2026";
+const USERS = [
+  { role: "Doctor", id: "DOC001", pw: "doctor123", name: "Dr. Mehta" },
+  { role: "Doctor", id: "DOC002", pw: "doctor123", name: "Dr. Sharma" },
+  { role: "Nurse", id: "NUR001", pw: "nurse123", name: "Nurse Anjali" },
+  { role: "Nurse", id: "NUR002", pw: "nurse123", name: "Nurse Priya" },
+  { role: "Nurse", id: "NUR003", pw: "nurse123", name: "Nurse Kavya" },
+  { role: "OPD Technician", id: "OPD001", pw: "opd123", name: "OPD Technician" },
+  { role: "Lab Technician", id: "LAB001", pw: "lab123", name: "Lab Technician" },
+];
+const DOCS = ["Dr. Mehta", "Dr. Sharma"];
+const NURSES = ["Nurse Anjali", "Nurse Priya", "Nurse Kavya"];
+const TESTS = {
+  CBC: [["Hemoglobin", "g/dL", "13.8"], ["WBC", "/µL", "7200"], ["Platelets", "/µL", "240000"]],
+  "Blood Glucose": [["Glucose", "mg/dL", "95"]],
+  "Lipid Profile": [["Total Cholesterol", "mg/dL", "180"], ["HDL", "mg/dL", "50"], ["LDL", "mg/dL", "100"], ["Triglycerides", "mg/dL", "140"]],
+  LFT: [["ALT", "U/L", "30"], ["AST", "U/L", "28"], ["Bilirubin", "mg/dL", "0.8"]],
+  KFT: [["Creatinine", "mg/dL", "0.9"], ["Urea", "mg/dL", "28"]],
+  "Urine Routine": [["Protein", "", "Nil"], ["Glucose", "", "Nil"], ["pH", "", "6.0"]],
+};
+const E = { symptoms: "", assessment: "", diagnosis: "", prescription: "" };
+const mk = (id, name, age, gender, phone, allergies, hist, doctor, nurse, status, token, sym, dx, regToday) => ({
+  id, name, age, gender, phone, allergies, medicalHistory: hist, doctor, nurse, status, token, regToday,
+  appointments: [], current: { ...E },
+  consultations: sym ? [{ date: "05 Oct 2026", doctor, symptoms: sym, diagnosis: dx, lab: "CBC" }] : [],
+});
+const SEED = [
+  mk("P1001", "Aarav Sharma", 24, "Male", "9876543210", "Penicillin", ["No previous major illness", "Viral fever in 2025", "No previous surgeries"], "Dr. Mehta", "Nurse Anjali", "Waiting", 1, "Fever and fatigue", "Possible viral infection", false),
+  mk("P1002", "Priya Nair", 31, "Female", "9876501234", "", ["Migraine since 2022"], "Dr. Sharma", "Nurse Priya", "In Consultation", 2, "Headache and nausea", "Migraine", false),
+  mk("P1003", "Rohan Gupta", 45, "Male", "9811122233", "Sulfa drugs", ["Hypertension", "No previous surgeries"], "Dr. Mehta", "Nurse Kavya", "Completed", 3, "Cough for 5 days", "Bronchitis", false),
+  mk("P1004", "Sneha Rao", 28, "Female", "9822233344", "", ["Mild asthma"], "Dr. Sharma", "Nurse Anjali", "Waiting", 4, "", "", true),
+  mk("P1005", "Aditya Singh", 36, "Male", "9833344455", "Dust", ["Type 2 diabetes"], "Dr. Mehta", "Nurse Priya", "Waiting", 5, "", "", true),
 ];
 
-// orders: { [patientId]: { test, indication, status: "sent" | "resulted", result: {hb, wbc, plt} | null } }
+const card = "bg-white rounded-xl shadow-sm border border-slate-200 p-5";
+const btn = "bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 text-white text-sm font-medium px-4 py-2 rounded-lg";
+const inp = "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mt-1 focus:outline-none focus:ring-2 focus:ring-teal-500 read-only:bg-slate-50";
+const F = ({ l, children }) => <label className="block text-sm text-slate-600 mb-3">{l}{children}</label>;
+const Cards = ({ items }) => (
+  <div className="grid grid-cols-3 gap-4">
+    {items.map(([l, v]) => (
+      <div key={l} className={card}><p className="text-sm text-slate-500">{l}</p><p className="text-3xl font-semibold text-teal-700">{v}</p></div>
+    ))}
+  </div>
+);
+const Badge = ({ done, children }) => (
+  <span className={`text-xs font-semibold px-3 py-1 rounded-full ${done ? "bg-teal-100 text-teal-800" : "bg-amber-50 text-amber-700"}`}>{children}</span>
+);
+const unit = (test, k) => TESTS[test].find((x) => x[0] === k)?.[1] || "";
+const OPD_STATUS = (o) => (o.reviewed ? "REVIEWED" : { "Sent to LIS": "SENT TO LIS", Processing: "PROCESSING", "Result Available": "RESULT AVAILABLE" }[o.status]);
 
-function IntegrationBanner({ orders }) {
-  const list = Object.values(orders);
-  const hasSent = list.some((o) => o.status === "sent");
-  const hasResult = list.some((o) => o.status === "resulted");
-  const on = "bg-teal-600 text-white";
-  const off = "bg-slate-100 text-slate-500";
-  const Chip = ({ active, children }) => (
-    <span className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors duration-500 ${active ? on : off}`}>{children}</span>
-  );
-  const Arrow = ({ active }) => (
-    <ArrowRight size={14} className={`transition-colors duration-500 ${active ? "text-teal-600" : "text-slate-300"}`} />
-  );
+function Login({ onLogin }) {
+  const [f, setF] = useState({ role: "", id: "", pw: "" });
+  const [err, setErr] = useState("");
+  const s = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const go = () => {
+    const u = USERS.find((x) => x.role === f.role && x.id === f.id.trim() && x.pw === f.pw);
+    u ? onLogin(u) : setErr("Invalid credentials. Please check your role, ID and password.");
+  };
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-3 flex flex-wrap items-center gap-2">
-      <span className="text-xs font-semibold text-slate-700 mr-2">OPD–LIS Integration</span>
-      <Chip active>OPD</Chip>
-      <Arrow active={hasSent || hasResult} />
-      <Chip active={hasSent || hasResult}>Lab order</Chip>
-      <Arrow active={hasSent || hasResult} />
-      <Chip active={hasSent || hasResult}>LIS</Chip>
-      <Arrow active={hasResult} />
-      <Chip active={hasResult}>Lab result</Chip>
-      <Arrow active={hasResult} />
-      <Chip active={hasResult}>OPD</Chip>
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className={`${card} w-full max-w-sm`}>
+        <div className="text-center mb-5">
+          <Stethoscope className="mx-auto text-teal-600 mb-2" />
+          <h1 className="text-xl font-semibold text-slate-800">Hospital OPD &amp; LIS</h1>
+          <p className="text-sm text-slate-500">Integrated Outpatient Department System</p>
+        </div>
+        <F l="Role">
+          <select value={f.role} onChange={s("role")} className={inp}>
+            <option value="">Select Role</option>
+            {["Doctor", "Nurse", "OPD Technician", "Lab Technician"].map((r) => <option key={r}>{r}</option>)}
+          </select>
+        </F>
+        <F l="ID"><input value={f.id} onChange={s("id")} className={inp} /></F>
+        <F l="Password"><input type="password" value={f.pw} onChange={s("pw")} className={inp} onKeyDown={(e) => e.key === "Enter" && go()} /></F>
+        {err && <p className="text-sm text-red-600 mb-3">{err}</p>}
+        <button onClick={go} className={`${btn} w-full`}>Login</button>
+        <details className="mt-4 text-xs text-slate-600">
+          <summary className="cursor-pointer text-teal-700 font-medium">Demo Credentials</summary>
+          <table className="w-full mt-2">
+            <tbody>{USERS.map((u) => <tr key={u.id}><td className="py-0.5">{u.name}</td><td>{u.id}</td><td>{u.pw}</td></tr>)}</tbody>
+          </table>
+        </details>
+      </div>
     </div>
   );
 }
 
-function Toast({ message }) {
-  if (!message) return null;
+function PatientList({ list, onOpen, showStaff }) {
+  const [q, setQ] = useState("");
+  const shown = list.filter((p) => (p.name + p.id).toLowerCase().includes(q.toLowerCase()));
   return (
-    <div className="fixed top-5 right-5 z-50 bg-teal-700 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium">
-      {message}
+    <div className="space-y-3">
+      <div className="relative">
+        <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by patient name or patient ID..." className={`${inp} pl-9 mt-0`} />
+      </div>
+      {shown.length === 0 && <p className="text-sm text-slate-500">No patients found.</p>}
+      {shown.map((p) => (
+        <div key={p.id} className={`${card} !p-4 flex items-center justify-between`}>
+          <div>
+            <p className="font-medium text-slate-800">{p.name} <span className="text-slate-400 font-normal">· {p.id}</span></p>
+            <p className="text-sm text-slate-500">{p.age} years, {p.gender}{showStaff && ` · ${p.doctor} · ${p.nurse}`}</p>
+          </div>
+          <button onClick={() => onOpen(p.id)} className={btn}>Open Patient</button>
+        </div>
+      ))}
     </div>
   );
 }
 
-function OrderModal({ patient, onClose, onSend }) {
+function Queue({ list, onOpen }) {
+  return (
+    <div className={`${card} overflow-x-auto`}>
+      <h2 className="font-semibold text-slate-700 mb-3">Today's OPD Queue</h2>
+      <table className="w-full text-sm text-left">
+        <thead className="text-slate-500"><tr><th className="py-1">Token</th><th>Patient</th><th>Doctor</th><th>Nurse</th><th>Status</th></tr></thead>
+        <tbody>
+          {list.map((p) => (
+            <tr key={p.id} className="border-t border-slate-100">
+              <td className="py-2">{String(p.token).padStart(2, "0")}</td>
+              <td><button onClick={() => onOpen(p.id)} className="text-teal-700 hover:underline">{p.name}</button></td>
+              <td>{p.doctor}</td><td>{p.nurse.replace("Nurse ", "")}</td><td>{p.status}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Register({ onRegister }) {
+  const [f, setF] = useState({ name: "", age: "", gender: "Male", phone: "", allergies: "", history: "", reason: "", doctor: DOCS[0], nurse: NURSES[0] });
+  const s = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const ok = f.name.trim() && f.age && f.reason.trim();
+  return (
+    <div className={card}>
+      <h2 className="font-semibold text-slate-800 mb-1">Register Patient</h2>
+      <p className="text-sm text-slate-500 mb-4">Patient arrives at hospital → registered at OPD.</p>
+      <F l="Patient Name"><input value={f.name} onChange={s("name")} className={inp} /></F>
+      <div className="grid grid-cols-3 gap-3">
+        <F l="Age"><input type="number" value={f.age} onChange={s("age")} className={inp} /></F>
+        <F l="Gender"><select value={f.gender} onChange={s("gender")} className={inp}><option>Male</option><option>Female</option><option>Other</option></select></F>
+        <F l="Phone"><input value={f.phone} onChange={s("phone")} className={inp} /></F>
+      </div>
+      <F l="Allergies"><input value={f.allergies} onChange={s("allergies")} placeholder="Leave blank if none" className={inp} /></F>
+      <F l="Medical History (one per line)"><textarea rows={2} value={f.history} onChange={s("history")} className={inp} /></F>
+      <F l="Reason for Visit"><input value={f.reason} onChange={s("reason")} className={inp} /></F>
+      <div className="grid grid-cols-2 gap-3">
+        <F l="Assign Doctor"><select value={f.doctor} onChange={s("doctor")} className={inp}>{DOCS.map((d) => <option key={d}>{d}</option>)}</select></F>
+        <F l="Assign Nurse"><select value={f.nurse} onChange={s("nurse")} className={inp}>{NURSES.map((d) => <option key={d}>{d}</option>)}</select></F>
+      </div>
+      <button disabled={!ok} onClick={() => onRegister(f)} className={btn}>Register Patient</button>
+    </div>
+  );
+}
+
+function OrderModal({ p, orders, onSend, onClose }) {
   const [test, setTest] = useState("CBC");
-  const [indication, setIndication] = useState(patient.symptoms);
+  const [ind, setInd] = useState(p.current.symptoms);
+  const [pri, setPri] = useState("Routine");
+  const dup = orders.some((o) => o.patientId === p.id && o.test === test && o.status !== "Result Available");
   return (
     <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-40 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="text-lg font-semibold text-slate-800">Order Laboratory Test</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+        <div className="flex justify-between mb-4"><h3 className="text-lg font-semibold">Order Laboratory Test</h3><button onClick={onClose}><X size={20} className="text-slate-400" /></button></div>
+        <F l="Test"><select value={test} onChange={(e) => setTest(e.target.value)} className={inp}>{Object.keys(TESTS).map((t) => <option key={t}>{t}</option>)}</select></F>
+        <F l="Clinical Indication"><input value={ind} onChange={(e) => setInd(e.target.value)} className={inp} /></F>
+        <div className="flex gap-5 text-sm mb-4">
+          {["Routine", "Urgent"].map((x) => <label key={x} className="flex items-center gap-2"><input type="radio" checked={pri === x} onChange={() => setPri(x)} />{x}</label>)}
         </div>
-        <label className="block text-sm text-slate-600 mb-1">Test</label>
-        <select value={test} onChange={(e) => setTest(e.target.value)}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-teal-500">
-          <option>CBC</option>
-        </select>
-        <label className="block text-sm text-slate-600 mb-1">Clinical indication</label>
-        <input value={indication} onChange={(e) => setIndication(e.target.value)}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-teal-500" />
-        <button onClick={() => onSend(test, indication)}
-          className="w-full bg-teal-600 hover:bg-teal-700 text-white font-medium py-2.5 rounded-lg">
-          Send to LIS
-        </button>
+        {dup && <p className="text-sm text-amber-700 mb-3">{test} is already ordered and still in progress for this patient.</p>}
+        <button disabled={dup} onClick={() => onSend(test, ind, pri)} className={`${btn} w-full`}>Send to LIS</button>
       </div>
     </div>
   );
 }
 
-function AddPatientForm({ onAdd, onCancel }) {
-  const [f, setF] = useState({ name: "", age: "", gender: "Male", symptoms: "" });
-  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
-  const ok = f.name.trim() && f.age && f.symptoms.trim();
-  const input = "w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500";
+function Profile({ p, user, orders, setOrders, upd, flash }) {
+  const isDoc = user.role === "Doctor", isNurse = user.role === "Nurse";
+  const [c, setC] = useState(p.current);
+  const [modal, setModal] = useState(false);
+  const [fu, setFu] = useState({ date: "10 Oct 2026", time: "10:30 AM", doctor: p.doctor });
+  const mine = orders.filter((o) => o.patientId === p.id);
+  const sc = (k) => (e) => setC({ ...c, [k]: e.target.value });
+  const save = () => { upd(p.id, (x) => ({ ...x, current: c, status: x.status === "Waiting" ? "In Consultation" : x.status })); flash("✓ Consultation saved"); };
+  const complete = () => {
+    upd(p.id, (x) => ({ ...x, current: { ...E }, status: "Completed", consultations: [{ date: TODAY, doctor: p.doctor, symptoms: c.symptoms, diagnosis: c.diagnosis, lab: mine.map((o) => o.test).join(", ") || "—" }, ...x.consultations] }));
+    setC({ ...E }); flash("✓ Consultation completed");
+  };
+  const send = (test, indication, priority) => {
+    setOrders([...orders, { orderId: "L" + (1001 + orders.length), patientId: p.id, test, indication, priority, orderedBy: user.name, status: "Sent to LIS", date: TODAY, results: null, reviewed: false }]);
+    setModal(false); flash(`✓ ${test} sent to LIS`);
+  };
+  const schedule = () => { upd(p.id, (x) => ({ ...x, appointments: [...x.appointments, { type: "Follow-up", ...fu }] })); flash("Follow-up appointment scheduled."); };
   return (
-    <div className="bg-white rounded-xl shadow-sm border-2 border-teal-200 p-5 space-y-3">
-      <h3 className="font-semibold text-slate-800">Add Patient</h3>
-      <div>
-        <label className="block text-sm text-slate-600 mb-1">Full name</label>
-        <input value={f.name} onChange={set("name")} className={input} />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm text-slate-600 mb-1">Age</label>
-          <input type="number" min="0" value={f.age} onChange={set("age")} className={input} />
-        </div>
-        <div>
-          <label className="block text-sm text-slate-600 mb-1">Gender</label>
-          <select value={f.gender} onChange={set("gender")} className={input}>
-            <option>Male</option><option>Female</option><option>Other</option>
-          </select>
+    <div className="space-y-5">
+      <div className={card}>
+        <h1 className="text-xl font-semibold text-slate-800 mb-2">{p.name}</h1>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-600">
+          <p>Patient ID: <b>{p.id}</b></p><p>Phone: {p.phone}</p>
+          <p>Age: {p.age}</p><p>Gender: {p.gender}</p>
+          <p>Assigned Doctor: {p.doctor}</p><p>Assigned Nurse: {p.nurse}</p>
         </div>
       </div>
-      <div>
-        <label className="block text-sm text-slate-600 mb-1">Symptoms</label>
-        <input value={f.symptoms} onChange={set("symptoms")} className={input} />
-      </div>
-      <div className="flex gap-2 pt-1">
-        <button onClick={() => onAdd(f)} disabled={!ok}
-          className="bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 text-white font-medium px-5 py-2 rounded-lg">
-          Save Patient
-        </button>
-        <button onClick={onCancel} className="text-slate-600 px-4 py-2 rounded-lg hover:bg-slate-100">Cancel</button>
-      </div>
-    </div>
-  );
-}
-
-function OpdDashboard({ patients, orders, onOpen, onAdd }) {
-  const [showForm, setShowForm] = useState(false);
-  const pending = Object.values(orders).filter((o) => o.status === "sent").length;
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-slate-800">OPD Module</h1>
-      <IntegrationBanner orders={orders} />
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">Today's Patients</p>
-          <p className="text-3xl font-semibold text-slate-800">{patients.length + 5}</p>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">Pending Lab Results</p>
-          <p className="text-3xl font-semibold text-teal-700">{pending}</p>
-        </div>
+        <div className={card}><h2 className="font-semibold text-slate-700 mb-2">Allergies</h2><p className="text-sm">{p.allergies || "No known allergies"}</p></div>
+        <div className={card}><h2 className="font-semibold text-slate-700 mb-2">Medical History</h2><ul className="text-sm list-disc ml-4">{p.medicalHistory.length ? p.medicalHistory.map((h) => <li key={h}>{h}</li>) : <li>None recorded</li>}</ul></div>
       </div>
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-700">Current Patients</h2>
-        {!showForm && (
-          <button onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-2 border border-teal-600 text-teal-700 hover:bg-teal-50 text-sm font-medium px-4 py-2 rounded-lg">
-            <Plus size={16} /> Add Patient
-          </button>
-        )}
-      </div>
-      {showForm && <AddPatientForm onCancel={() => setShowForm(false)} onAdd={(f) => { onAdd(f); setShowForm(false); }} />}
-      <div className="space-y-3">
-        {patients.map((p) => (
-          <div key={p.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center"><User size={20} /></div>
-              <div>
-                <p className="font-medium text-slate-800">{p.name}</p>
-                <p className="text-sm text-slate-500">{p.age} years, {p.gender}</p>
-              </div>
-            </div>
-            <button onClick={() => onOpen(p.id)}
-              className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-lg">
-              Open Patient
-            </button>
+      <div className={card}>
+        <h2 className="font-semibold text-slate-700 mb-2">Consultation History</h2>
+        {p.consultations.length === 0 && <p className="text-sm text-slate-500">No previous consultations.</p>}
+        {p.consultations.map((x, i) => (
+          <div key={i} className="text-sm border-t border-slate-100 py-2">
+            <p className="font-medium">{x.date} · {x.doctor}</p>
+            <p>Symptoms: {x.symptoms || "—"} · Diagnosis: {x.diagnosis || "—"} · Lab Test: {x.lab}</p>
           </div>
         ))}
+        {p.appointments.map((a, i) => <p key={i} className="text-sm text-teal-700 border-t border-slate-100 pt-2 mt-2">{a.type}: {a.date}, {a.time} with {a.doctor || p.doctor}</p>)}
       </div>
-    </div>
-  );
-}
-
-function PatientPage({ patient, order, orders, onBack, onOrder }) {
-  const [showResult, setShowResult] = useState(false);
-  const r = order?.result;
-  const ranges = [
-    ["Hemoglobin", r?.hb, "g/dL", "13.0 – 17.0"],
-    ["WBC", r?.wbc, "/µL", "4000 – 11000"],
-    ["Platelets", r?.plt, "/µL", "150000 – 450000"],
-  ];
-  return (
-    <div className="space-y-6">
-      <button onClick={onBack} className="text-sm text-teal-700 hover:underline">← Back to OPD</button>
-      <IntegrationBanner orders={orders} />
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-        <h1 className="text-xl font-semibold text-slate-800">{patient.name}</h1>
-        <p className="text-sm text-slate-500 mt-1">Patient ID: {patient.id} · Age: {patient.age} · Gender: {patient.gender}</p>
+      <div className={card}>
+        <h2 className="font-semibold text-slate-700 mb-1">Current Consultation <span className="text-xs font-normal text-slate-500">({p.status})</span></h2>
+        {!isDoc && <p className="text-xs text-slate-500 mb-2">View only — only doctors can edit.</p>}
+        {[["symptoms", "Symptoms"], ["assessment", "Clinical Assessment"], ["diagnosis", "Diagnosis"], ["prescription", "Prescription"]].map(([k, l]) => (
+          <F key={k} l={l}><textarea rows={2} readOnly={!isDoc} value={isDoc ? c[k] : p.current[k]} onChange={sc(k)} className={inp} /></F>
+        ))}
+        {isDoc && p.status !== "Completed" && <div className="flex gap-2"><button onClick={save} className={btn}>Save Consultation</button><button onClick={complete} className="border border-teal-600 text-teal-700 text-sm font-medium px-4 py-2 rounded-lg">Complete Consultation</button></div>}
       </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-        <h2 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><Stethoscope size={18} className="text-teal-600" /> Current Consultation</h2>
-        <p className="text-sm text-slate-500">Symptoms</p>
-        <p className="text-slate-800 mb-3">{patient.symptoms}</p>
-        <p className="text-sm text-slate-500">Doctor's Assessment</p>
-        <p className="text-slate-800">{patient.assessment}</p>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-        <h2 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><FlaskConical size={18} className="text-teal-600" /> Laboratory Tests</h2>
-
-        {!order && (
-          <>
-            <p className="text-slate-500 mb-4">No laboratory tests ordered.</p>
-            <button onClick={onOrder}
-              className="inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-medium px-5 py-2.5 rounded-lg shadow-sm">
-              <Plus size={18} /> Order Lab Test
-            </button>
-          </>
-        )}
-
-        {order?.status === "sent" && (
-          <div className="border border-slate-200 rounded-lg p-4 flex items-center justify-between">
-            <p className="font-medium text-slate-800">{order.test}</p>
-            <span className="text-xs font-semibold bg-amber-50 text-amber-700 px-3 py-1 rounded-full">Status: SENT TO LIS</span>
-          </div>
-        )}
-
-        {order?.status === "resulted" && (
-          <div className="border-2 border-teal-500 bg-teal-50/40 rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="font-medium text-slate-800">{order.test}</p>
-              <span className="text-xs font-semibold bg-teal-100 text-teal-800 px-3 py-1 rounded-full flex items-center gap-1">
-                <CheckCircle2 size={14} /> RESULT AVAILABLE
-              </span>
+      <div className={card}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold text-slate-700 flex items-center gap-2"><FlaskConical size={18} className="text-teal-600" /> Lab Investigations</h2>
+          {isDoc && <button onClick={() => setModal(true)} className={`${btn} inline-flex items-center gap-1`}><Plus size={16} /> Order Lab Test</button>}
+        </div>
+        {mine.length === 0 && <p className="text-sm text-slate-500">No laboratory tests ordered.</p>}
+        <div className="space-y-3">
+          {mine.map((o) => (
+            <div key={o.orderId} className={`rounded-lg p-4 ${o.results ? "border-2 border-teal-500 bg-teal-50/40" : "border border-slate-200"}`}>
+              <div className="flex justify-between items-center">
+                <p className="font-medium">{o.test} <span className="text-xs text-slate-400">· {o.priority}</span></p>
+                <Badge done={!!o.results}>{o.results && "✓ "}{OPD_STATUS(o)}</Badge>
+              </div>
+              {o.results && (
+                <div className="mt-2 text-sm grid grid-cols-3 gap-2">
+                  {Object.entries(o.results).map(([k, v]) => <p key={k} className="text-slate-500">{k}<br /><b className="text-slate-800">{v} {unit(o.test, k)}</b></p>)}
+                </div>
+              )}
+              {isDoc && o.results && !o.reviewed && <button onClick={() => setOrders(orders.map((x) => (x === o ? { ...x, reviewed: true } : x)))} className="mt-3 text-sm text-teal-700 underline">Mark result as reviewed</button>}
             </div>
-            <div className="grid grid-cols-3 gap-3 text-sm">
-              <div><p className="text-slate-500">Hemoglobin</p><p className="font-semibold text-slate-800">{r.hb} g/dL</p></div>
-              <div><p className="text-slate-500">WBC</p><p className="font-semibold text-slate-800">{r.wbc} /µL</p></div>
-              <div><p className="text-slate-500">Platelets</p><p className="font-semibold text-slate-800">{r.plt} /µL</p></div>
-            </div>
-            <button onClick={() => setShowResult(!showResult)}
-              className="inline-flex items-center gap-2 text-sm font-medium text-teal-700 border border-teal-300 bg-white px-4 py-2 rounded-lg hover:bg-teal-50">
-              <FileText size={16} /> {showResult ? "Hide Result" : "View Result"}
-            </button>
-            {showResult && (
-              <table className="w-full text-sm bg-white rounded-lg border border-slate-200">
-                <thead><tr className="text-left text-slate-500">
-                  <th className="p-2 font-medium">Test</th><th className="p-2 font-medium">Value</th><th className="p-2 font-medium">Reference</th>
-                </tr></thead>
-                <tbody>
-                  {ranges.map(([n, v, u, ref]) => (
-                    <tr key={n} className="border-t border-slate-100">
-                      <td className="p-2">{n}</td><td className="p-2 font-medium">{v} {u}</td><td className="p-2 text-slate-500">{ref}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
+          ))}
+        </div>
       </div>
-    </div>
-  );
-}
-
-function LisPage({ patients, orders, onProcess }) {
-  const entries = Object.entries(orders);
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-slate-800">Laboratory Information System</h1>
-      <IntegrationBanner orders={orders} />
-      <h2 className="text-lg font-semibold text-slate-700">Incoming Lab Orders from OPD</h2>
-      {entries.length === 0 && (
-        <div className="bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
-          No orders yet. Orders sent from OPD will appear here.
+      {isNurse && (
+        <div className={card}>
+          <h2 className="font-semibold text-slate-700 mb-3">Schedule Follow-up</h2>
+          <div className="grid grid-cols-3 gap-3">
+            <F l="Date"><input value={fu.date} onChange={(e) => setFu({ ...fu, date: e.target.value })} className={inp} /></F>
+            <F l="Time"><input value={fu.time} onChange={(e) => setFu({ ...fu, time: e.target.value })} className={inp} /></F>
+            <F l="Doctor"><select value={fu.doctor} onChange={(e) => setFu({ ...fu, doctor: e.target.value })} className={inp}>{DOCS.map((d) => <option key={d}>{d}</option>)}</select></F>
+          </div>
+          <button onClick={schedule} className={btn}>Schedule</button>
         </div>
       )}
-      {entries.map(([pid, o]) => {
-        const p = patients.find((x) => x.id === pid);
-        const done = o.status === "resulted";
-        return (
-          <div key={pid} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-slate-800 text-lg">{o.test}</p>
-              <p className="text-sm text-slate-600">Patient: {p.name}</p>
-              <p className="text-sm text-slate-600">Ordered by: Dr. Strange</p>
-              <span className={`inline-block mt-2 text-xs font-semibold px-3 py-1 rounded-full ${done ? "bg-teal-100 text-teal-800" : "bg-sky-50 text-sky-700"}`}>
-                Status: {done ? "RESULT SENT TO OPD" : "RECEIVED FROM OPD"}
-              </span>
-            </div>
-            {!done && (
-              <button onClick={() => onProcess(pid)}
-                className="bg-teal-600 hover:bg-teal-700 text-white font-medium px-4 py-2 rounded-lg">
-                Process Test
-              </button>
-            )}
-          </div>
-        );
-      })}
+      {modal && <OrderModal p={p} orders={orders} onSend={send} onClose={() => setModal(false)} />}
     </div>
   );
 }
 
-function ProcessPage({ patients, pid, orders, onBack, onVerify, goOpd }) {
-  const p = patients.find((x) => x.id === pid);
-  const order = orders[pid];
-  const done = order.status === "resulted";
-  const [form, setForm] = useState({ hb: "", wbc: "", plt: "" });
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-  const filled = form.hb && form.wbc && form.plt;
+function LabList({ orders, page, onOpen }) {
+  const [q, setQ] = useState("");
+  const rows = orders.filter((o) => o.patientId.toLowerCase().includes(q.toLowerCase()) && (page === "results" ? o.results : page === "dash" ? !o.results : true));
+  const n = (s) => orders.filter((o) => o.status === s).length;
+  return (
+    <div className="space-y-4">
+      {page === "dash" && <Cards items={[["Pending Orders", n("Sent to LIS")], ["Processing", n("Processing")], ["Completed", n("Result Available")]]} />}
+      <div className="flex items-start gap-2 text-xs text-teal-800 bg-teal-50 border border-teal-200 rounded-lg p-3">
+        <ShieldCheck size={16} className="shrink-0" /> Patient-identifying information is restricted. Laboratory staff access the Patient ID required for test processing.
+      </div>
+      <div className="relative">
+        <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by Patient ID..." className={`${inp} pl-9 mt-0`} />
+      </div>
+      <div className={`${card} overflow-x-auto`}>
+        <h2 className="font-semibold text-slate-700 mb-3">{page === "results" ? "Completed Results" : "Incoming Lab Orders"}</h2>
+        {rows.length === 0 && <p className="text-sm text-slate-500">No orders yet. Orders sent from OPD will appear here.</p>}
+        {rows.length > 0 && (
+          <table className="w-full text-sm text-left">
+            <thead className="text-slate-500"><tr><th className="py-1">Patient ID</th><th>Test</th><th>Doctor</th><th>Priority</th><th>Status</th><th>Date</th><th></th></tr></thead>
+            <tbody>
+              {rows.map((o) => (
+                <tr key={o.orderId} className="border-t border-slate-100">
+                  <td className="py-2 font-medium">{o.patientId}</td><td>{o.test}</td><td>{o.orderedBy}</td>
+                  <td className={o.priority === "Urgent" ? "text-red-600 font-medium" : ""}>{o.priority}</td>
+                  <td>{{ "Sent to LIS": "Received", Processing: "Processing", "Result Available": "Completed" }[o.status]}</td>
+                  <td>{o.date}</td>
+                  <td>{o.status !== "Result Available" && <button onClick={() => onOpen(o.orderId)} className={btn}>Process</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
 
-  const Step = ({ state, children }) => (
+function Process({ o, onVerify, back }) {
+  const fields = TESTS[o.test];
+  const done = o.status === "Result Available";
+  const [f, setF] = useState(o.results || {});
+  const ok = fields.every(([k]) => (f[k] || "").toString().trim());
+  const Step = ({ s, children }) => (
     <li className="flex items-center gap-2 text-sm">
-      {state === "done" && <CheckCircle2 size={18} className="text-teal-600" />}
-      {state === "now" && <Loader2 size={18} className="text-sky-600 animate-spin" />}
-      {state === "todo" && <Circle size={18} className="text-slate-300" />}
-      <span className={state === "todo" ? "text-slate-400" : "text-slate-700"}>{children}</span>
+      {s === 2 ? <CheckCircle2 size={18} className="text-teal-600" /> : s === 1 ? <Loader2 size={18} className="text-sky-600 animate-spin" /> : <Circle size={18} className="text-slate-300" />}
+      <span className={s === 0 ? "text-slate-400" : ""}>{children}</span>
     </li>
   );
-
   return (
-    <div className="space-y-6">
-      <button onClick={onBack} className="text-sm text-teal-700 hover:underline">← Back to LIS orders</button>
-      <IntegrationBanner orders={orders} />
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-        <h1 className="text-xl font-semibold text-slate-800 mb-3">{order.test} — {p.name}</h1>
-        <ul className="space-y-2">
-          <Step state="done">Order received from OPD</Step>
-          <Step state="done">Sample collected</Step>
-          <Step state={done ? "done" : "now"}>{done ? "Processed" : "Processing"}</Step>
-          <Step state={done ? "done" : "todo"}>Result verification</Step>
+    <div className="space-y-5">
+      <button onClick={back} className="text-sm text-teal-700 hover:underline">← Back to orders</button>
+      <div className={card}>
+        <p className="text-sm text-slate-600">Patient ID: <b>{o.patientId}</b></p>
+        <p className="text-sm text-slate-600">Test: <b>{o.test}</b> · Ordered by: {o.orderedBy}</p>
+        <ul className="space-y-2 mt-3">
+          <Step s={2}>Received</Step><Step s={2}>Sample collected</Step>
+          <Step s={done ? 2 : 1}>Processing</Step><Step s={done ? 2 : 0}>Result verification</Step>
         </ul>
       </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-        <h2 className="font-semibold text-slate-700 mb-4 flex items-center gap-2"><Activity size={18} className="text-teal-600" /> Enter Result</h2>
-        {[["hb", "Hemoglobin (g/dL)", "13.8"], ["wbc", "WBC (/µL)", "7200"], ["plt", "Platelets (/µL)", "240000"]].map(([k, label, ph]) => (
-          <div key={k} className="mb-3">
-            <label className="block text-sm text-slate-600 mb-1">{label}</label>
-            <input value={done ? order.result[k] : form[k]} onChange={set(k)} disabled={done} placeholder={ph}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 disabled:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-500" />
-          </div>
+      <div className={card}>
+        <h2 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><Activity size={18} className="text-teal-600" /> Enter Results</h2>
+        {fields.map(([k, u, ph]) => (
+          <F key={k} l={`${k} ${u && `(${u})`}`}><input disabled={done} value={f[k] || ""} placeholder={ph} onChange={(e) => setF({ ...f, [k]: e.target.value })} className={inp} /></F>
         ))}
-        {!done ? (
-          <button onClick={() => onVerify(pid, form)} disabled={!filled}
-            className="mt-2 w-full bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 text-white font-medium py-2.5 rounded-lg">
-            Verify &amp; Send to OPD
-          </button>
-        ) : (
-          <div className="mt-2 rounded-lg bg-teal-50 border border-teal-200 p-4">
-            <p className="font-medium text-teal-800 flex items-center gap-2"><CheckCircle2 size={18} /> Result verified and sent to OPD</p>
-            <p className="text-xs font-semibold text-teal-700 mt-1">Status: RESULT SENT TO OPD</p>
-            <button onClick={goOpd} className="mt-3 text-sm font-medium text-teal-700 underline">Go to OPD</button>
-          </div>
-        )}
+        {done ? <p className="text-teal-800 bg-teal-50 border border-teal-200 rounded-lg p-3 text-sm">✓ Result verified · ✓ Result sent to OPD</p>
+          : <button disabled={!ok} onClick={() => onVerify(o.orderId, f)} className={`${btn} w-full`}>Verify &amp; Send to OPD</button>}
       </div>
     </div>
   );
 }
 
 export default function App() {
-  const [tab, setTab] = useState("opd"); // opd | lis
-  const [patientId, setPatientId] = useState(null);
-  const [processId, setProcessId] = useState(null);
-  const [patients, setPatients] = useState(INITIAL_PATIENTS);
-  const [orders, setOrders] = useState({});
-  const [modal, setModal] = useState(false);
+  const [user, setUser] = useState(null);
+  const [patients, setPatients] = useState(SEED);
+  const [orders, setOrders] = useState([]);
+  const [page, setPage] = useState("dash");
+  const [pid, setPid] = useState(null);
+  const [oid, setOid] = useState(null);
   const [toast, setToast] = useState("");
+  const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2500); };
+  const upd = (id, fn) => setPatients((ps) => ps.map((p) => (p.id === id ? fn(p) : p)));
+  const nav = (pg) => { setPage(pg); setPid(null); setOid(null); };
 
-  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
+  if (!user) return <Login onLogin={(u) => { setUser(u); nav("dash"); }} />;
+  const r = user.role;
+  const mine = patients.filter((p) => (r === "Doctor" ? p.doctor === user.name : r === "Nurse" ? p.nurse === user.name : true));
+  const myOrders = orders.filter((o) => mine.some((p) => p.id === o.patientId));
+  const common = [["dash", "OPD Dashboard"], ["pts", "My Patients"], ["appts", "Appointments"]];
+  const navs = { Doctor: common, Nurse: common, "OPD Technician": [["dash", "OPD Dashboard"], ["pts", "All Patients"], ["reg", "Register Patient"], ["queue", "OPD Queue"]], "Lab Technician": [["dash", "LIS Dashboard"], ["orders", "Lab Orders"], ["results", "Results"]] }[r];
+  const patient = patients.find((p) => p.id === pid);
+  const open = (id) => setPid(id);
+  const followups = mine.flatMap((p) => p.appointments.map((a) => ({ ...a, name: p.name })));
 
-  const sendOrder = (test, indication) => {
-    setOrders({ ...orders, [patientId]: { test, indication, status: "sent", result: null } });
-    setModal(false);
-    flash("✓ Lab order sent to LIS");
-  };
-
-  const verify = (pid, f) => {
-    setOrders({ ...orders, [pid]: { ...orders[pid], status: "resulted", result: f } });
-    flash("✓ Result verified and sent to OPD");
-  };
-
-  const go = (t) => { setTab(t); setPatientId(null); setProcessId(null); };
-  const patient = patients.find((p) => p.id === patientId);
-
-  const addPatient = (f) => {
+  const register = (f) => {
     const id = "P" + (1001 + patients.length);
     setPatients([...patients, {
-      id, name: f.name.trim(), age: f.age, gender: f.gender,
-      symptoms: f.symptoms.trim(), assessment: "Awaiting assessment",
+      id, name: f.name.trim(), age: f.age, gender: f.gender, phone: f.phone, allergies: f.allergies.trim(),
+      medicalHistory: f.history.split("\n").map((x) => x.trim()).filter(Boolean), doctor: f.doctor, nurse: f.nurse,
+      appointments: [], consultations: [], current: { ...E, symptoms: f.reason }, status: "Waiting", token: patients.length + 1, regToday: true,
     }]);
-    setPatientId(id);
-    flash("✓ Patient added");
+    flash(`Patient registered successfully. ID: ${id}`); nav("pts");
   };
+  const verify = (orderId, results) => {
+    setOrders(orders.map((o) => (o.orderId === orderId ? { ...o, status: "Result Available", results } : o)));
+    flash("✓ Result verified and sent to OPD");
+  };
+  const startProcess = (id) => {
+    setOrders(orders.map((o) => (o.orderId === id && o.status === "Sent to LIS" ? { ...o, status: "Processing" } : o)));
+    setOid(id);
+  };
+
+  let body;
+  if (r === "Lab Technician") {
+    const o = orders.find((x) => x.orderId === oid);
+    body = o ? <Process key={o.orderId} o={o} onVerify={verify} back={() => setOid(null)} /> : <LabList orders={orders} page={page} onOpen={startProcess} />;
+  } else if (patient) {
+    body = <div><button onClick={() => setPid(null)} className="text-sm text-teal-700 hover:underline mb-3">← Back</button><Profile key={patient.id} p={patient} user={user} orders={orders} setOrders={setOrders} upd={upd} flash={flash} /></div>;
+  } else if (page === "reg") body = <Register onRegister={register} />;
+  else if (page === "queue") body = <Queue list={patients} onOpen={open} />;
+  else if (page === "appts") body = (
+    <div className="space-y-4"><Queue list={mine} onOpen={open} />
+      <div className={card}><h2 className="font-semibold text-slate-700 mb-2">Follow-up Appointments</h2>
+        {followups.length === 0 && <p className="text-sm text-slate-500">None scheduled.</p>}
+        {followups.map((a, i) => <p key={i} className="text-sm py-1">{a.name} — {a.date}, {a.time} with {a.doctor}</p>)}</div></div>
+  );
+  else if (page === "pts") body = <PatientList list={mine} onOpen={open} showStaff={r === "OPD Technician"} />;
+  else {
+    const waiting = patients.filter((p) => p.status === "Waiting").length;
+    body = (
+      <div className="space-y-5">
+        {r === "Doctor" && <Cards items={[["Assigned Patients", mine.length], ["Today's Appointments", mine.filter((p) => p.status !== "Completed").length], ["Pending Lab Results", myOrders.filter((o) => !o.results).length]]} />}
+        {r === "Nurse" && <Cards items={[["Assigned Patients", mine.length], ["Today's Appointments", mine.length], ["Follow-ups", followups.length]]} />}
+        {r === "OPD Technician" && <>
+          <Cards items={[["Total Patients", patients.length], ["Today's Registrations", patients.filter((p) => p.regToday).length], ["Waiting Patients", waiting]]} />
+          <div className="flex gap-3"><button onClick={() => nav("reg")} className={btn}>Register Patient</button><button onClick={() => nav("pts")} className={btn}>View All Patients</button><button onClick={() => nav("queue")} className={btn}>View OPD Queue</button></div></>}
+        {(r === "Doctor" || r === "Nurse") && <><h2 className="text-lg font-semibold text-slate-700">My Patients</h2><PatientList list={mine} onOpen={open} /></>}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
       <nav className="bg-white border-b border-slate-200">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-2">
-          <span className="font-semibold text-teal-700 mr-4">Hospital Demo</span>
-          {[["opd", "OPD", Stethoscope], ["lis", "LIS", FlaskConical]].map(([k, label, Icon]) => (
-            <button key={k} onClick={() => go(k)}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium ${tab === k ? "bg-teal-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
-              <Icon size={16} /> {label}
-            </button>
+        <div className="max-w-4xl mx-auto px-4 h-14 flex items-center gap-1">
+          <span className="font-semibold text-teal-700 mr-3 text-sm">{r === "Lab Technician" ? "LIS" : "OPD"}</span>
+          {navs.map(([k, l]) => (
+            <button key={k} onClick={() => nav(k)} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${page === k ? "bg-teal-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{l}</button>
           ))}
+          <span className="ml-auto text-sm text-slate-500 mr-2">{user.name}</span>
+          <button onClick={() => setUser(null)} className="flex items-center gap-1 text-sm text-slate-600 hover:text-red-600"><LogOut size={16} /> Logout</button>
         </div>
       </nav>
-
-      <main className="max-w-3xl mx-auto px-4 py-8">
-        {tab === "opd" && !patient && <OpdDashboard patients={patients} orders={orders} onOpen={setPatientId} onAdd={addPatient} />}
-        {tab === "opd" && patient && (
-          <PatientPage patient={patient} order={orders[patient.id]} orders={orders}
-            onBack={() => setPatientId(null)} onOrder={() => setModal(true)} />
-        )}
-        {tab === "lis" && !processId && <LisPage patients={patients} orders={orders} onProcess={setProcessId} />}
-        {tab === "lis" && processId && (
-          <ProcessPage patients={patients} pid={processId} orders={orders} onBack={() => setProcessId(null)}
-            onVerify={verify} goOpd={() => go("opd")} />
-        )}
+      <main className="max-w-4xl mx-auto px-4 py-6">
+        <h1 className="text-2xl font-semibold mb-4">{page === "dash" && !pid && !oid ? `Welcome, ${user.name}` : ""}</h1>
+        {body}
       </main>
-
-      {modal && <OrderModal patient={patient} onClose={() => setModal(false)} onSend={sendOrder} />}
-      <Toast message={toast} />
+      {toast && <div className="fixed top-5 right-5 z-50 bg-teal-700 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium">{toast}</div>}
     </div>
   );
 }
