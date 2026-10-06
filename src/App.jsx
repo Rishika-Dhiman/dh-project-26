@@ -186,7 +186,7 @@ function Profile({ p, user, orders, setOrders, upd, flash }) {
   const [fu, setFu] = useState({ date: "10 Oct 2026", time: "10:30 AM", doctor: p.doctor });
   const mine = orders.filter((o) => o.patientId === p.id);
   const sc = (k) => (e) => setC({ ...c, [k]: e.target.value });
-  const save = () => { upd(p.id, (x) => ({ ...x, current: c, status: x.status === "Waiting" ? "In Consultation" : x.status })); flash("✓ Consultation saved"); };
+  const save = () => { upd(p.id, (x) => ({ ...x, current: c, status: ["Waiting", "Follow-up Scheduled"].includes(x.status) ? "In Consultation" : x.status })); flash("✓ Consultation saved"); };
   const complete = () => {
     upd(p.id, (x) => ({ ...x, current: { ...E }, status: "Completed", consultations: [{ date: TODAY, doctor: p.doctor, symptoms: c.symptoms, diagnosis: c.diagnosis, lab: mine.map((o) => o.test).join(", ") || "—" }, ...x.consultations] }));
     setC({ ...E }); flash("✓ Consultation completed");
@@ -195,7 +195,7 @@ function Profile({ p, user, orders, setOrders, upd, flash }) {
     setOrders([...orders, { orderId: "L" + (1001 + orders.length), patientId: p.id, test, indication, priority, orderedBy: user.name, status: "Sent to LIS", date: TODAY, results: null, reviewed: false }]);
     setModal(false); flash(`✓ ${test} sent to LIS`);
   };
-  const schedule = () => { upd(p.id, (x) => ({ ...x, appointments: [...x.appointments, { type: "Follow-up", ...fu }] })); flash("Follow-up appointment scheduled."); };
+  const schedule = () => { upd(p.id, (x) => ({ ...x, appointments: [...x.appointments, { type: "Follow-up", ...fu }], status: x.status === "Completed" ? "Follow-up Scheduled" : x.status })); flash("Follow-up appointment scheduled."); };
   return (
     <div className="space-y-5">
       <div className={card}>
@@ -399,7 +399,7 @@ export default function App() {
     const waiting = patients.filter((p) => p.status === "Waiting").length;
     body = (
       <div className="space-y-5">
-        {r === "Doctor" && <Cards items={[["Assigned Patients", mine.length], ["Today's Appointments", mine.filter((p) => p.status !== "Completed").length], ["Pending Lab Results", myOrders.filter((o) => !o.results).length]]} />}
+        {r === "Doctor" && <Cards items={[["Assigned Patients", mine.length], ["Today's Appointments", mine.filter((p) => ["Waiting", "In Consultation"].includes(p.status)).length], ["Pending Lab Results", myOrders.filter((o) => !o.results).length]]} />}
         {r === "Nurse" && <Cards items={[["Assigned Patients", mine.length], ["Today's Appointments", mine.length], ["Follow-ups", followups.length]]} />}
         {r === "OPD Technician" && <>
           <Cards items={[["Total Patients", patients.length], ["Today's Registrations", patients.filter((p) => p.regToday).length], ["Waiting Patients", waiting]]} />
