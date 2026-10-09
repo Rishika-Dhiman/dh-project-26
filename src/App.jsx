@@ -121,7 +121,7 @@ function Login({ onLogin }) {
   );
 }
 
-function PatientList({ list, onOpen, showStaff }) {
+function PatientList({ list, onOpen, showStaff, onAdmit }) {
   const [q, setQ] = useState("");
   const shown = list.filter((p) => (p.name + p.id).toLowerCase().includes(q.toLowerCase()));
   return (
@@ -134,10 +134,13 @@ function PatientList({ list, onOpen, showStaff }) {
       {shown.map((p) => (
         <div key={p.id} className={`${card} !p-4 flex items-center justify-between`}>
           <div>
-            <p className="font-medium text-slate-800">{p.name} <span className="text-slate-400 font-normal">· {p.id}</span></p>
+            <p className="font-medium text-slate-800">{p.name} <span className="text-slate-400 font-normal">· {p.id}</span> {p.admitted && <Badge done>Admitted</Badge>}</p>
             <p className="text-sm text-slate-500">{p.age} years, {p.gender}{showStaff && ` · ${p.doctor} · ${p.nurse}`}</p>
           </div>
-          <button onClick={() => onOpen(p.id)} className={btn}>Open Patient</button>
+          <div className="flex gap-2">
+            {onAdmit && !p.admitted && <button onClick={() => onAdmit(p.id)} className="border border-teal-600 text-teal-700 hover:bg-teal-50 text-sm font-medium px-4 py-2 rounded-lg">Admit</button>}
+            <button onClick={() => onOpen(p.id)} className={btn}>Open Patient</button>
+          </div>
         </div>
       ))}
     </div>
@@ -155,7 +158,7 @@ function Queue({ list, onOpen }) {
             <tr key={p.id} className="border-t border-slate-100">
               <td className="py-2">{String(p.token).padStart(2, "0")}</td>
               <td><button onClick={() => onOpen(p.id)} className="text-teal-700 hover:underline">{p.name}</button></td>
-              <td>{p.doctor}</td><td>{p.nurse.replace("Nurse ", "")}</td><td>{p.status}</td>
+              <td>{p.doctor}</td><td>{p.nurse.replace("Nurse ", "")}</td><td>{p.admitted ? "Admitted" : p.status}</td>
             </tr>
           ))}
         </tbody>
@@ -262,14 +265,14 @@ function Profile({ p, user, orders, setOrders, upd, flash }) {
     setC({ ...E }); flash("✓ Consultation completed");
   };
   const send = (test, indication, priority) => {
-    setOrders([...orders, { orderId: "L" + (1001 + orders.length), patientId: p.id, test, loinc: LOINC[test][0], indication, priority, orderedBy: user.name, status: "Sent to LIS", date: TODAY, results: null, reviewed: false }]);
+    setOrders([...orders, { orderId: "LT" + (1001 + orders.length), patientId: p.id, test, loinc: LOINC[test][0], indication, priority, orderedBy: user.name, status: "Sent to LIS", date: TODAY, results: null, reviewed: false }]);
     setModal(false); flash(`✓ ${test} sent to LIS`);
   };
   const schedule = () => { upd(p.id, (x) => ({ ...x, appointments: [...x.appointments, { type: "Follow-up", ...fu }], status: x.status === "Completed" ? "Follow-up Scheduled" : x.status })); flash("Follow-up appointment scheduled."); };
   return (
     <div className="space-y-5">
       <div className={card}>
-        <h1 className="text-xl font-semibold text-slate-800 mb-2">{p.name}</h1>
+        <h1 className="text-xl font-semibold text-slate-800 mb-2">{p.name} {p.admitted && <Badge done>Admitted</Badge>}</h1>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-600">
           <p>Patient ID: <b>{p.id}</b></p><p>Phone: {p.phone}</p>
           <p>Age: {p.age}</p><p>Gender: {p.gender}</p>
@@ -312,7 +315,7 @@ function Profile({ p, user, orders, setOrders, upd, flash }) {
           {mine.map((o) => (
             <div key={o.orderId} className={`rounded-lg p-4 ${o.results ? "border-2 border-teal-500 bg-teal-50/40" : "border border-slate-200"}`}>
               <div className="flex justify-between items-center">
-                <p className="font-medium">{o.test} <span className="text-xs text-slate-400">· {o.priority} · LOINC {o.loinc}</span></p>
+                <p className="font-medium">{o.test} <span className="text-xs text-slate-400">· Test ID {o.orderId} · {o.priority} · LOINC {o.loinc}</span></p>
                 <Badge done={!!o.results}>{o.results && "✓ "}{OPD_STATUS(o)}</Badge>
               </div>
               {o.results && (
@@ -343,7 +346,7 @@ function Profile({ p, user, orders, setOrders, upd, flash }) {
 
 function LabList({ orders, page, onOpen }) {
   const [q, setQ] = useState("");
-  const rows = orders.filter((o) => o.patientId.toLowerCase().includes(q.toLowerCase()) && (page === "results" ? o.results : page === "dash" ? !o.results : true));
+  const rows = orders.filter((o) => (o.patientId + o.orderId).toLowerCase().includes(q.toLowerCase()) && (page === "results" ? o.results : page === "dash" ? !o.results : true));
   const n = (s) => orders.filter((o) => o.status === s).length;
   return (
     <div className="space-y-4">
@@ -353,18 +356,18 @@ function LabList({ orders, page, onOpen }) {
       </div>
       <div className="relative">
         <Search size={16} className="absolute left-3 top-3 text-slate-400" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by Patient ID..." className={`${inp} pl-9 mt-0`} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by Patient ID or Test ID..." className={`${inp} pl-9 mt-0`} />
       </div>
       <div className={`${card} overflow-x-auto`}>
         <h2 className="font-semibold text-slate-700 mb-3">{page === "results" ? "Completed Results" : "Incoming Lab Orders"}</h2>
         {rows.length === 0 && <p className="text-sm text-slate-500">No orders yet. Orders sent from OPD will appear here.</p>}
         {rows.length > 0 && (
           <table className="w-full text-sm text-left">
-            <thead className="text-slate-500"><tr><th className="py-1">Patient ID</th><th>Test</th><th>Doctor</th><th>Priority</th><th>Status</th><th>Date</th><th></th></tr></thead>
+            <thead className="text-slate-500"><tr><th className="py-1">Test ID</th><th>Patient ID</th><th>Test</th><th>Doctor</th><th>Priority</th><th>Status</th><th>Date</th><th></th></tr></thead>
             <tbody>
               {rows.map((o) => (
                 <tr key={o.orderId} className="border-t border-slate-100">
-                  <td className="py-2 font-medium">{o.patientId}</td><td>{o.test}<br /><span className="text-xs text-slate-400">LOINC {o.loinc}</span></td><td>{o.orderedBy}</td>
+                  <td className="py-2 font-medium">{o.orderId}</td><td>{o.patientId}</td><td>{o.test}<br /><span className="text-xs text-slate-400">LOINC {o.loinc}</span></td><td>{o.orderedBy}</td>
                   <td className={o.priority === "Urgent" ? "text-red-600 font-medium" : ""}>{o.priority}</td>
                   <td>{{ "Sent to LIS": "Received", Processing: "Processing", "Result Available": "Completed" }[o.status]}</td>
                   <td>{o.date}</td>
@@ -396,7 +399,7 @@ function Process({ o, onVerify, back }) {
     <div className="space-y-5">
       <button onClick={back} className="text-sm text-teal-700 hover:underline">← Back to orders</button>
       <div className={card}>
-        <p className="text-sm text-slate-600">Patient ID: <b>{o.patientId}</b></p>
+        <p className="text-sm text-slate-600">Test ID: <b>{o.orderId}</b> · Patient ID: <b>{o.patientId}</b></p>
         <p className="text-sm text-slate-600">Test: <b>{o.test}</b> <span className="text-xs text-slate-400">(LOINC {o.loinc})</span> · Ordered by: {o.orderedBy}</p>
         <ul className="space-y-2 mt-3">
           <Step s={2}>Received</Step><Step s={2}>Sample collected</Step>
@@ -453,6 +456,7 @@ export default function App() {
   const navs = { Doctor: common, Nurse: common, "OPD Technician": [["dash", "OPD Dashboard"], ["pts", "All Patients"], ["reg", "Register Patient"], ["queue", "OPD Queue"]], "Lab Technician": [["dash", "LIS Dashboard"], ["orders", "Lab Orders"], ["results", "Results"]] }[r];
   const patient = patients.find((p) => p.id === pid);
   const open = (id) => setPid(id);
+  const admit = (id) => { upd(id, (x) => ({ ...x, admitted: true })); flash(`✓ ${patients.find((x) => x.id === id).name} admitted`); };
   const followups = mine.flatMap((p) => p.appointments.map((a) => ({ ...a, name: p.name })));
 
   const register = (f) => {
@@ -487,17 +491,27 @@ export default function App() {
         {followups.length === 0 && <p className="text-sm text-slate-500">None scheduled.</p>}
         {followups.map((a, i) => <p key={i} className="text-sm py-1">{a.name} — {a.date}, {a.time} with {a.doctor}</p>)}</div></div>
   );
-  else if (page === "pts") body = <PatientList list={mine} onOpen={open} showStaff={r === "OPD Technician"} />;
+  else if (page === "pts") body = <PatientList list={mine} onOpen={open} showStaff={r === "OPD Technician"} onAdmit={r === "Doctor" ? admit : null} />;
   else {
-    const waiting = patients.filter((p) => p.status === "Waiting").length;
+    const waiting = patients.filter((p) => p.status === "Waiting" && !p.admitted).length;
+    const admitted = patients.filter((p) => p.admitted);
     body = (
       <div className="space-y-5">
-        {r === "Doctor" && <Cards items={[["Assigned Patients", mine.length], ["Today's Appointments", mine.filter((p) => ["Waiting", "In Consultation"].includes(p.status)).length], ["Pending Lab Results", myOrders.filter((o) => !o.results).length]]} />}
+        {r === "Doctor" && <Cards items={[["Assigned Patients", mine.length], ["Today's Appointments", mine.filter((p) => ["Waiting", "In Consultation"].includes(p.status) && !p.admitted).length], ["Pending Lab Results", myOrders.filter((o) => !o.results).length]]} />}
         {r === "Nurse" && <Cards items={[["Assigned Patients", mine.length], ["Today's Appointments", mine.length], ["Follow-ups", followups.length]]} />}
         {r === "OPD Technician" && <>
           <Cards items={[["Total Patients", patients.length], ["Today's Registrations", patients.filter((p) => p.regToday).length], ["Waiting Patients", waiting]]} />
-          <div className="flex gap-3"><button onClick={() => nav("reg")} className={btn}>Register Patient</button><button onClick={() => nav("pts")} className={btn}>View All Patients</button><button onClick={() => nav("queue")} className={btn}>View OPD Queue</button></div></>}
-        {(r === "Doctor" || r === "Nurse") && <><h2 className="text-lg font-semibold text-slate-700">My Patients</h2><PatientList list={mine} onOpen={open} /></>}
+          <div className="flex gap-3"><button onClick={() => nav("reg")} className={btn}>Register Patient</button><button onClick={() => nav("pts")} className={btn}>View All Patients</button><button onClick={() => nav("queue")} className={btn}>View OPD Queue</button></div>
+          <div className={card}>
+            <h2 className="font-semibold text-slate-700 mb-2">Admitted Patients</h2>
+            {admitted.length === 0 && <p className="text-sm text-slate-500">No admitted patients.</p>}
+            {admitted.map((p) => (
+              <div key={p.id} className="flex items-center justify-between text-sm py-2 border-t border-slate-100">
+                <span><b>{p.name}</b> · {p.id} · {p.doctor}</span><Badge done>Admitted</Badge>
+              </div>
+            ))}
+          </div></>}
+        {(r === "Doctor" || r === "Nurse") && <><h2 className="text-lg font-semibold text-slate-700">My Patients</h2><PatientList list={mine} onOpen={open} onAdmit={r === "Doctor" ? admit : null} /></>}
       </div>
     );
   }
