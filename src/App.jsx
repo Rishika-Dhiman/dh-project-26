@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { Stethoscope, FlaskConical, LogOut, Plus, X, CheckCircle2, Circle, Loader2, Search, ShieldCheck, Activity } from "lucide-react";
 
-const TODAY = "06 Oct 2026";
+const NOW = new Date();
+const fmt = (d) => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+const iso = (d) => d.toISOString().slice(0, 10);
+const TODAY = fmt(NOW);
+const CLASH = [["amoxicillin", "penicillin"], ["ibuprofen", "nsaid"]];
 const USERS = [
   { role: "Doctor", id: "DOC001", pw: "doctor123", name: "Dr. Mehta" },
   { role: "Doctor", id: "DOC002", pw: "doctor123", name: "Dr. Sharma" },
-  { role: "Nurse", id: "NUR001", pw: "nurse123", name: "Nurse Anjali" },
-  { role: "Nurse", id: "NUR002", pw: "nurse123", name: "Nurse Priya" },
-  { role: "Nurse", id: "NUR003", pw: "nurse123", name: "Nurse Kavya" },
-  { role: "OPD Technician", id: "OPD001", pw: "opd123", name: "OPD Technician" },
+  { role: "Reception Staff", id: "REC001", pw: "rec123", name: "Reception Staff" },
   { role: "Lab Technician", id: "LAB001", pw: "lab123", name: "Lab Technician" },
 ];
 const DOCS = ["Dr. Mehta", "Dr. Sharma"];
-const NURSES = ["Nurse Anjali", "Nurse Priya", "Nurse Kavya"];
 const TESTS = {
   CBC: [["Hemoglobin", "g/dL", "13.8"], ["WBC", "/µL", "7200"], ["Platelets", "/µL", "240000"]],
   "Blood Glucose": [["Glucose", "mg/dL", "95"]],
@@ -54,17 +54,17 @@ const FLAG_TXT = { normal: "text-green-700", abnormal: "text-amber-700", critica
 const FLAG_MSG = { normal: "✓ Within healthy range", abnormal: "Outside healthy range", critical: "⚠ Extremely abnormal — please recheck" };
 const tidy = (t) => t.replace(/[,\s]+$/, "");
 const E = { symptoms: "", assessment: "", diagnosis: "", prescription: "" };
-const mk = (id, name, age, gender, phone, allergies, hist, doctor, nurse, status, token, sym, dx, regToday) => ({
-  id, name, age, gender, phone, allergies, medicalHistory: hist, doctor, nurse, status, token, regToday,
+const mk = (id, name, age, gender, phone, allergies, hist, doctor, status, token, sym, dx, regToday) => ({
+  id, name, age, gender, phone, allergies, medicalHistory: hist, doctor, status, token, regToday,
   appointments: [], current: { ...E },
   consultations: sym ? [{ date: "05 Oct 2026", doctor, symptoms: sym, diagnosis: dx, lab: "CBC" }] : [],
 });
 const SEED = [
-  mk("P1001", "Aarav Sharma", 24, "Male", "9876543210", "Penicillin", ["No previous major illness", "Viral fever in 2025", "No previous surgeries"], "Dr. Mehta", "Nurse Anjali", "Waiting", 1, "Fever and fatigue", "Possible viral infection", false),
-  mk("P1002", "Priya Nair", 31, "Female", "9876501234", "", ["Migraine since 2022"], "Dr. Sharma", "Nurse Priya", "In Consultation", 2, "Headache and nausea", "Migraine", false),
-  mk("P1003", "Rohan Gupta", 45, "Male", "9811122233", "Sulfa drugs", ["Hypertension", "No previous surgeries"], "Dr. Mehta", "Nurse Kavya", "Completed", 3, "Cough for 5 days", "Bronchitis", false),
-  mk("P1004", "Sneha Rao", 28, "Female", "9822233344", "", ["Mild asthma"], "Dr. Sharma", "Nurse Anjali", "Waiting", 4, "", "", true),
-  mk("P1005", "Aditya Singh", 36, "Male", "9833344455", "Dust", ["Type 2 diabetes"], "Dr. Mehta", "Nurse Priya", "Waiting", 5, "", "", true),
+  mk("P1001", "Aarav Sharma", 24, "Male", "9876543210", "Penicillin", ["No previous major illness", "Viral fever in 2025", "No previous surgeries"], "Dr. Mehta", "Waiting", 1, "Fever and fatigue", "Possible viral infection", false),
+  mk("P1002", "Priya Nair", 31, "Female", "9876501234", "", ["Migraine since 2022"], "Dr. Sharma", "In Consultation", 2, "Headache and nausea", "Migraine", false),
+  mk("P1003", "Rohan Gupta", 45, "Male", "9811122233", "Sulfa drugs", ["Hypertension", "No previous surgeries"], "Dr. Mehta", "Completed", 3, "Cough for 5 days", "Bronchitis", false),
+  mk("P1004", "Sneha Rao", 28, "Female", "9822233344", "", ["Mild asthma"], "Dr. Sharma", "Waiting", 4, "", "", true),
+  mk("P1005", "Aditya Singh", 36, "Male", "9833344455", "Dust", ["Type 2 diabetes"], "Dr. Mehta", "Waiting", 5, "", "", true),
 ];
 
 const card = "bg-white rounded-xl shadow-sm border border-slate-200 p-5";
@@ -103,7 +103,7 @@ function Login({ onLogin }) {
         <F l="Role">
           <select value={f.role} onChange={s("role")} className={inp}>
             <option value="">Select Role</option>
-            {["Doctor", "Nurse", "OPD Technician", "Lab Technician"].map((r) => <option key={r}>{r}</option>)}
+            {["Doctor", "Reception Staff", "Lab Technician"].map((r) => <option key={r}>{r}</option>)}
           </select>
         </F>
         <F l="ID"><input value={f.id} onChange={s("id")} className={inp} /></F>
@@ -135,7 +135,7 @@ function PatientList({ list, onOpen, showStaff, onAdmit }) {
         <div key={p.id} className={`${card} !p-4 flex items-center justify-between`}>
           <div>
             <p className="font-medium text-slate-800">{p.name} <span className="text-slate-400 font-normal">· {p.id}</span> {p.admitted && <Badge done>Admitted</Badge>}</p>
-            <p className="text-sm text-slate-500">{p.age} years, {p.gender}{showStaff && ` · ${p.doctor} · ${p.nurse}`}</p>
+            <p className="text-sm text-slate-500">{p.age} years, {p.gender}{showStaff && ` · ${p.doctor}`}</p>
           </div>
           <div className="flex gap-2">
             {onAdmit && !p.admitted && <button onClick={() => onAdmit(p.id)} className="border border-teal-600 text-teal-700 hover:bg-teal-50 text-sm font-medium px-4 py-2 rounded-lg">Admit</button>}
@@ -152,13 +152,13 @@ function Queue({ list, onOpen }) {
     <div className={`${card} overflow-x-auto`}>
       <h2 className="font-semibold text-slate-700 mb-3">Today's OPD Queue</h2>
       <table className="w-full text-sm text-left">
-        <thead className="text-slate-500"><tr><th className="py-1">Token</th><th>Patient</th><th>Doctor</th><th>Nurse</th><th>Status</th></tr></thead>
+        <thead className="text-slate-500"><tr><th className="py-1">Token</th><th>Patient</th><th>Doctor</th><th>Status</th></tr></thead>
         <tbody>
           {list.map((p) => (
             <tr key={p.id} className="border-t border-slate-100">
               <td className="py-2">{String(p.token).padStart(2, "0")}</td>
               <td><button onClick={() => onOpen(p.id)} className="text-teal-700 hover:underline">{p.name}</button></td>
-              <td>{p.doctor}</td><td>{p.nurse.replace("Nurse ", "")}</td><td>{p.admitted ? "Admitted" : p.status}</td>
+              <td>{p.doctor}</td><td>{p.admitted ? "Admitted" : p.status}</td>
             </tr>
           ))}
         </tbody>
@@ -168,25 +168,24 @@ function Queue({ list, onOpen }) {
 }
 
 function Register({ onRegister }) {
-  const [f, setF] = useState({ name: "", age: "", gender: "Male", phone: "", allergies: "", history: "", reason: "", doctor: DOCS[0], nurse: NURSES[0] });
+  const [f, setF] = useState({ name: "", age: "", gender: "Male", phone: "", allergies: "", history: "", reason: "", doctor: DOCS[0] });
   const s = (k) => (e) => setF({ ...f, [k]: e.target.value });
-  const ok = f.name.trim() && f.age && f.reason.trim();
+  const ok = f.name.trim() && f.age !== "" && f.age >= 0 && f.age <= 120 && f.reason.trim() && (!f.phone || /^\d{10}$/.test(f.phone));
   return (
     <div className={card}>
       <h2 className="font-semibold text-slate-800 mb-1">Register Patient</h2>
-      <p className="text-sm text-slate-500 mb-4">Patient arrives at hospital → registered at OPD.</p>
+      <p className="text-sm text-slate-500 mb-4">Patient arrives at hospital → registered at the registration desk.</p>
       <F l="Patient Name"><input value={f.name} onChange={s("name")} className={inp} /></F>
       <div className="grid grid-cols-3 gap-3">
-        <F l="Age"><input type="number" value={f.age} onChange={s("age")} className={inp} /></F>
+        <F l="Age"><input type="number" min="0" max="120" value={f.age} onChange={s("age")} className={inp} /></F>
         <F l="Gender"><select value={f.gender} onChange={s("gender")} className={inp}><option>Male</option><option>Female</option><option>Other</option></select></F>
-        <F l="Phone"><input value={f.phone} onChange={s("phone")} className={inp} /></F>
+        <F l="Phone"><input placeholder="10 digits" value={f.phone} onChange={s("phone")} className={inp} /></F>
       </div>
       <F l="Allergies"><input value={f.allergies} onChange={s("allergies")} placeholder="Leave blank if none" className={inp} /></F>
       <F l="Medical History (one per line)"><textarea rows={2} value={f.history} onChange={s("history")} className={inp} /></F>
       <F l="Reason for Visit"><input value={f.reason} onChange={s("reason")} className={inp} /></F>
       <div className="grid grid-cols-2 gap-3">
         <F l="Assign Doctor"><select value={f.doctor} onChange={s("doctor")} className={inp}>{DOCS.map((d) => <option key={d}>{d}</option>)}</select></F>
-        <F l="Assign Nurse"><select value={f.nurse} onChange={s("nurse")} className={inp}>{NURSES.map((d) => <option key={d}>{d}</option>)}</select></F>
       </div>
       <button disabled={!ok} onClick={() => onRegister(f)} className={btn}>Register Patient</button>
     </div>
@@ -246,18 +245,35 @@ function OrderModal({ p, orders, onSend, onClose }) {
           {["Routine", "Urgent"].map((x) => <label key={x} className="flex items-center gap-2"><input type="radio" checked={pri === x} onChange={() => setPri(x)} />{x}</label>)}
         </div>
         {dup && <p className="text-sm text-amber-700 mb-3">{test} is already ordered and still in progress for this patient.</p>}
-        <button disabled={dup} onClick={() => onSend(test, ind, pri)} className={`${btn} w-full`}>Send to LIS</button>
+        <button disabled={dup || !ind.trim()} onClick={() => onSend(test, ind, pri)} className={`${btn} w-full`}>Send to LIS</button>
       </div>
     </div>
   );
 }
 
+function BasicInfo({ p }) {
+  return (
+    <div className={card}>
+      <h1 className="text-xl font-semibold text-slate-800 mb-2">{p.name} {p.admitted && <Badge done>Admitted</Badge>}</h1>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-600">
+        <p>Patient ID: <b>{p.id}</b></p><p>Phone: {p.phone}</p>
+        <p>Age: {p.age}</p><p>Gender: {p.gender}</p>
+        <p>Assigned Doctor: {p.doctor}</p><p>Token {String(p.token).padStart(2, "0")} · {p.admitted ? "Admitted" : p.status}</p>
+      </div>
+      {p.appointments.map((a, i) => <p key={i} className="text-sm text-teal-700 mt-2">{a.type}: {a.date}, {a.time} with {a.doctor || p.doctor}</p>)}
+      <p className="text-xs text-slate-500 mt-4">Clinical details (diagnosis, prescription, lab results) are restricted to the treating doctor.</p>
+    </div>
+  );
+}
+
 function Profile({ p, user, orders, setOrders, upd, flash }) {
-  const isDoc = user.role === "Doctor", isNurse = user.role === "Nurse";
+  const isDoc = user.role === "Doctor";
   const [c, setC] = useState(p.current);
   const [modal, setModal] = useState(false);
-  const [fu, setFu] = useState({ date: "10 Oct 2026", time: "10:30 AM", doctor: p.doctor });
+  const [fu, setFu] = useState({ date: iso(new Date(Date.now() + 7 * 864e5)), time: "10:30", doctor: p.doctor });
   const mine = orders.filter((o) => o.patientId === p.id);
+  const nth = (o) => mine.filter((x) => x.test === o.test && mine.indexOf(x) <= mine.indexOf(o)).length;
+  const clash = CLASH.filter(([d, a]) => c.prescription.toLowerCase().includes(d) && (p.allergies || "").toLowerCase().includes(a)).map(([d]) => d);
   const sc = (k) => (e) => setC({ ...c, [k]: e.target.value });
   const save = () => { upd(p.id, (x) => ({ ...x, current: { ...c, symptoms: tidy(c.symptoms), diagnosis: tidy(c.diagnosis), prescription: tidy(c.prescription) }, status: ["Waiting", "Follow-up Scheduled"].includes(x.status) ? "In Consultation" : x.status })); flash("✓ Consultation saved"); };
   const complete = () => {
@@ -265,10 +281,10 @@ function Profile({ p, user, orders, setOrders, upd, flash }) {
     setC({ ...E }); flash("✓ Consultation completed");
   };
   const send = (test, indication, priority) => {
-    setOrders([...orders, { orderId: "LT" + (1001 + orders.length), patientId: p.id, test, loinc: LOINC[test][0], indication, priority, orderedBy: user.name, status: "Sent to LIS", date: TODAY, results: null, reviewed: false }]);
+    setOrders([...orders, { orderId: "LT" + (1001 + orders.length), patientId: p.id, test, loinc: LOINC[test][0], indication, priority, orderedBy: user.name, status: "Sent to LIS", date: TODAY, time: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }), results: null, reviewed: false }]);
     setModal(false); flash(`✓ ${test} sent to LIS`);
   };
-  const schedule = () => { upd(p.id, (x) => ({ ...x, appointments: [...x.appointments, { type: "Follow-up", ...fu }], status: x.status === "Completed" ? "Follow-up Scheduled" : x.status })); flash("Follow-up appointment scheduled."); };
+  const schedule = () => { upd(p.id, (x) => ({ ...x, appointments: [...x.appointments, { type: "Follow-up", ...fu, date: fmt(new Date(fu.date)) }], status: x.status === "Completed" ? "Follow-up Scheduled" : x.status })); flash("Follow-up appointment scheduled."); };
   return (
     <div className="space-y-5">
       <div className={card}>
@@ -276,7 +292,7 @@ function Profile({ p, user, orders, setOrders, upd, flash }) {
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-600">
           <p>Patient ID: <b>{p.id}</b></p><p>Phone: {p.phone}</p>
           <p>Age: {p.age}</p><p>Gender: {p.gender}</p>
-          <p>Assigned Doctor: {p.doctor}</p><p>Assigned Nurse: {p.nurse}</p>
+          <p>Assigned Doctor: {p.doctor}</p>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
@@ -303,7 +319,8 @@ function Profile({ p, user, orders, setOrders, upd, flash }) {
               : <textarea rows={2} readOnly={!isDoc} value={isDoc ? c[k] : p.current[k]} onChange={sc(k)} className={inp} />}
           </F>
         ))}
-        {isDoc && p.status !== "Completed" && <div className="flex gap-2"><button onClick={save} className={btn}>Save Consultation</button><button onClick={complete} className="border border-teal-600 text-teal-700 text-sm font-medium px-4 py-2 rounded-lg">Complete Consultation</button></div>}
+        {clash.length > 0 && <p className="text-sm text-red-700 bg-red-50 border border-red-300 rounded-lg p-3 mb-3">⚠ Allergy alert: {p.name} is allergic to {p.allergies}. The prescription contains {clash.join(", ")}.</p>}
+        {isDoc && p.status !== "Completed" && <div className="flex gap-2"><button onClick={save} className={btn}>Save Consultation</button><button onClick={complete} disabled={!c.symptoms.trim() || !c.diagnosis.trim()} className="border border-teal-600 text-teal-700 text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-40">Complete Consultation</button></div>}
       </div>
       <div className={card}>
         <div className="flex items-center justify-between mb-3">
@@ -315,7 +332,10 @@ function Profile({ p, user, orders, setOrders, upd, flash }) {
           {mine.map((o) => (
             <div key={o.orderId} className={`rounded-lg p-4 ${o.results ? "border-2 border-teal-500 bg-teal-50/40" : "border border-slate-200"}`}>
               <div className="flex justify-between items-center">
-                <p className="font-medium">{o.test} <span className="text-xs text-slate-400">· Test ID {o.orderId} · {o.priority} · LOINC {o.loinc}</span></p>
+                <div>
+                  <p className="font-medium">{o.test}{nth(o) > 1 && <span className="text-teal-700"> #{nth(o)}</span>} <span className="text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">ID {o.orderId}</span></p>
+                  <p className="text-xs text-slate-500">Ordered {o.date}, {o.time} · {o.priority} · LOINC {o.loinc}</p>
+                </div>
                 <Badge done={!!o.results}>{o.results && "✓ "}{OPD_STATUS(o)}</Badge>
               </div>
               {o.results && (
@@ -328,15 +348,15 @@ function Profile({ p, user, orders, setOrders, upd, flash }) {
           ))}
         </div>
       </div>
-      {(isNurse || isDoc) && (
+      {isDoc && (
         <div className={card}>
           <h2 className="font-semibold text-slate-700 mb-3">Schedule Follow-up</h2>
           <div className="grid grid-cols-3 gap-3">
-            <F l="Date"><input value={fu.date} onChange={(e) => setFu({ ...fu, date: e.target.value })} className={inp} /></F>
-            <F l="Time"><input value={fu.time} onChange={(e) => setFu({ ...fu, time: e.target.value })} className={inp} /></F>
+            <F l="Date"><input type="date" min={iso(NOW)} value={fu.date} onChange={(e) => setFu({ ...fu, date: e.target.value })} className={inp} /></F>
+            <F l="Time"><input type="time" value={fu.time} onChange={(e) => setFu({ ...fu, time: e.target.value })} className={inp} /></F>
             <F l="Doctor"><select value={fu.doctor} onChange={(e) => setFu({ ...fu, doctor: e.target.value })} className={inp}>{DOCS.map((d) => <option key={d}>{d}</option>)}</select></F>
           </div>
-          <button onClick={schedule} className={btn}>Schedule</button>
+          <button disabled={!fu.date || !fu.time} onClick={schedule} className={btn}>Schedule</button>
         </div>
       )}
       {modal && <OrderModal p={p} orders={orders} onSend={send} onClose={() => setModal(false)} />}
@@ -370,7 +390,7 @@ function LabList({ orders, page, onOpen }) {
                   <td className="py-2 font-medium">{o.orderId}</td><td>{o.patientId}</td><td>{o.test}<br /><span className="text-xs text-slate-400">LOINC {o.loinc}</span></td><td>{o.orderedBy}</td>
                   <td className={o.priority === "Urgent" ? "text-red-600 font-medium" : ""}>{o.priority}</td>
                   <td>{{ "Sent to LIS": "Received", Processing: "Processing", "Result Available": "Completed" }[o.status]}</td>
-                  <td>{o.date}</td>
+                  <td>{o.date}<br /><span className="text-xs text-slate-400">{o.time}</span></td>
                   <td>{o.status !== "Result Available" && <button onClick={() => onOpen(o.orderId)} className={btn}>Process</button>}</td>
                 </tr>
               ))}
@@ -400,7 +420,7 @@ function Process({ o, onVerify, back }) {
       <button onClick={back} className="text-sm text-teal-700 hover:underline">← Back to orders</button>
       <div className={card}>
         <p className="text-sm text-slate-600">Test ID: <b>{o.orderId}</b> · Patient ID: <b>{o.patientId}</b></p>
-        <p className="text-sm text-slate-600">Test: <b>{o.test}</b> <span className="text-xs text-slate-400">(LOINC {o.loinc})</span> · Ordered by: {o.orderedBy}</p>
+        <p className="text-sm text-slate-600">Test: <b>{o.test}</b> <span className="text-xs text-slate-400">(LOINC {o.loinc})</span> · Ordered by: {o.orderedBy} · {o.date}, {o.time}</p>
         <ul className="space-y-2 mt-3">
           <Step s={2}>Received</Step><Step s={2}>Sample collected</Step>
           <Step s={done ? 2 : 1}>Processing</Step><Step s={done ? 2 : 0}>Result verification</Step>
@@ -450,10 +470,10 @@ export default function App() {
 
   if (!user) return <Login onLogin={(u) => { setUser(u); nav("dash"); }} />;
   const r = user.role;
-  const mine = patients.filter((p) => (r === "Doctor" ? p.doctor === user.name : r === "Nurse" ? p.nurse === user.name : true));
+  const mine = patients.filter((p) => (r === "Doctor" ? p.doctor === user.name : true));
   const myOrders = orders.filter((o) => mine.some((p) => p.id === o.patientId));
   const common = [["dash", "OPD Dashboard"], ["pts", "My Patients"], ["appts", "Appointments"]];
-  const navs = { Doctor: common, Nurse: common, "OPD Technician": [["dash", "OPD Dashboard"], ["pts", "All Patients"], ["reg", "Register Patient"], ["queue", "OPD Queue"]], "Lab Technician": [["dash", "LIS Dashboard"], ["orders", "Lab Orders"], ["results", "Results"]] }[r];
+  const navs = { Doctor: common, "Reception Staff": [["dash", "Dashboard"], ["pts", "All Patients"], ["reg", "Register Patient"], ["queue", "OPD Queue"]], "Lab Technician": [["dash", "LIS Dashboard"], ["orders", "Lab Orders"], ["results", "Results"]] }[r];
   const patient = patients.find((p) => p.id === pid);
   const open = (id) => setPid(id);
   const admit = (id) => { upd(id, (x) => ({ ...x, admitted: true })); flash(`✓ ${patients.find((x) => x.id === id).name} admitted`); };
@@ -463,7 +483,7 @@ export default function App() {
     const id = "P" + (1001 + patients.length);
     setPatients([...patients, {
       id, name: f.name.trim(), age: f.age, gender: f.gender, phone: f.phone, allergies: f.allergies.trim(),
-      medicalHistory: f.history.split("\n").map((x) => x.trim()).filter(Boolean), doctor: f.doctor, nurse: f.nurse,
+      medicalHistory: f.history.split("\n").map((x) => x.trim()).filter(Boolean), doctor: f.doctor,
       appointments: [], consultations: [], current: { ...E, symptoms: f.reason }, status: "Waiting", token: patients.length + 1, regToday: true,
     }]);
     flash(`Patient registered successfully. ID: ${id}`); nav("pts");
@@ -482,7 +502,7 @@ export default function App() {
     const o = orders.find((x) => x.orderId === oid);
     body = o ? <Process key={o.orderId} o={o} onVerify={verify} back={() => setOid(null)} /> : <LabList orders={orders} page={page} onOpen={startProcess} />;
   } else if (patient) {
-    body = <div><button onClick={() => setPid(null)} className="text-sm text-teal-700 hover:underline mb-3">← Back</button><Profile key={patient.id} p={patient} user={user} orders={orders} setOrders={setOrders} upd={upd} flash={flash} /></div>;
+    body = <div><button onClick={() => setPid(null)} className="text-sm text-teal-700 hover:underline mb-3">← Back</button>{r === "Reception Staff" ? <BasicInfo p={patient} /> : <Profile key={patient.id} p={patient} user={user} orders={orders} setOrders={setOrders} upd={upd} flash={flash} />}</div>;
   } else if (page === "reg") body = <Register onRegister={register} />;
   else if (page === "queue") body = <Queue list={patients} onOpen={open} />;
   else if (page === "appts") body = (
@@ -491,15 +511,14 @@ export default function App() {
         {followups.length === 0 && <p className="text-sm text-slate-500">None scheduled.</p>}
         {followups.map((a, i) => <p key={i} className="text-sm py-1">{a.name} — {a.date}, {a.time} with {a.doctor}</p>)}</div></div>
   );
-  else if (page === "pts") body = <PatientList list={mine} onOpen={open} showStaff={r === "OPD Technician"} onAdmit={r === "Doctor" ? admit : null} />;
+  else if (page === "pts") body = <PatientList list={mine} onOpen={open} showStaff={r === "Reception Staff"} onAdmit={r === "Doctor" ? admit : null} />;
   else {
     const waiting = patients.filter((p) => p.status === "Waiting" && !p.admitted).length;
     const admitted = patients.filter((p) => p.admitted);
     body = (
       <div className="space-y-5">
         {r === "Doctor" && <Cards items={[["Assigned Patients", mine.length], ["Today's Appointments", mine.filter((p) => ["Waiting", "In Consultation"].includes(p.status) && !p.admitted).length], ["Pending Lab Results", myOrders.filter((o) => !o.results).length]]} />}
-        {r === "Nurse" && <Cards items={[["Assigned Patients", mine.length], ["Today's Appointments", mine.length], ["Follow-ups", followups.length]]} />}
-        {r === "OPD Technician" && <>
+        {r === "Reception Staff" && <>
           <Cards items={[["Total Patients", patients.length], ["Today's Registrations", patients.filter((p) => p.regToday).length], ["Waiting Patients", waiting]]} />
           <div className="flex gap-3"><button onClick={() => nav("reg")} className={btn}>Register Patient</button><button onClick={() => nav("pts")} className={btn}>View All Patients</button><button onClick={() => nav("queue")} className={btn}>View OPD Queue</button></div>
           <div className={card}>
@@ -511,7 +530,7 @@ export default function App() {
               </div>
             ))}
           </div></>}
-        {(r === "Doctor" || r === "Nurse") && <><h2 className="text-lg font-semibold text-slate-700">My Patients</h2><PatientList list={mine} onOpen={open} onAdmit={r === "Doctor" ? admit : null} /></>}
+        {r === "Doctor" && <><h2 className="text-lg font-semibold text-slate-700">My Patients</h2><PatientList list={mine} onOpen={open} onAdmit={r === "Doctor" ? admit : null} /></>}
       </div>
     );
   }
